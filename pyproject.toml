@@ -18,7 +18,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
   "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
-dependencies = []
+dependencies = ["python-dotenv>=1.0"]
 
 [project.urls]
 Homepage = "https://github.com/benekreng/yt-transcribe"

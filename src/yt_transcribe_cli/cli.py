@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 import json
-import os
 import sys
 import threading
 import traceback
@@ -31,13 +30,9 @@ from yt_transcribe import (
 from yt_transcribe.cache import slugify
 from yt_transcribe.errors import InvalidSourceError
 from yt_transcribe_cli.clipboard import ClipboardError, read_clipboard, write_clipboard
+from yt_transcribe_cli.config import EnvironmentFileError, load_environment
 
-DEFAULT_OUTPUT_DIR = Path(
-    os.environ.get(
-        "REMEM_TRANSCRIPTS_DIR",
-        Path.home() / ".remem" / "transcripts",
-    )
-)
+DEFAULT_OUTPUT_DIR = Path("~/.remem/transcripts")
 
 EXIT_OK = 0
 EXIT_OPERATIONAL_ERROR = 1
@@ -50,7 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="yt-transcribe",
         description="Transcribe YouTube videos, playlists, or channels.",
         epilog=(
-            "The OpenAI key is read from OPENAI_API_KEY by default. "
+            "Settings load from ~/.config/yt-transcribe/.env and ./.env; "
+            "existing environment variables take precedence. "
             "Use --format json for a stable machine-readable response. "
             "With no source, the URL is read from the clipboard and the "
             "finished transcript is copied back to it."
@@ -76,8 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
         "-o",
         "--output-dir",
         type=Path,
-        default=DEFAULT_OUTPUT_DIR,
-        help=f"Artifact directory (default: {DEFAULT_OUTPUT_DIR}).",
+        help=f"Artifact directory (or REMEM_TRANSCRIPTS_DIR; default: {DEFAULT_OUTPUT_DIR}).",
     )
     parser.add_argument(
         "--cache-dir",
@@ -119,9 +114,20 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         help="Environment variable containing the API key (default: OPENAI_API_KEY).",
     )
+    env_group = parser.add_mutually_exclusive_group()
+    env_group.add_argument(
+        "--env-file",
+        type=Path,
+        metavar="PATH",
+        help="Read this environment file instead of the automatic user and project files.",
+    )
+    env_group.add_argument(
+        "--no-env-file",
+        action="store_true",
+        help="Disable environment-file loading; use only existing environment variables.",
+    )
     parser.add_argument(
         "--base-url",
-        default=os.environ.get("OPENAI_BASE_URL"),
         help="OpenAI-compatible API base URL (or set OPENAI_BASE_URL).",
     )
     parser.add_argument(
@@ -205,6 +211,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    try:
+        settings = load_environment(env_file=args.env_file, enabled=not args.no_env_file)
+    except EnvironmentFileError as exc:
+        return _configuration_error(args, str(exc))
+
     if not args.source:
         try:
             args.source = [_source_from_clipboard()]
@@ -222,13 +233,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             "--multi cannot be combined with multiple explicit sources.",
         )
 
-    api_key = os.environ.get(args.api_key_env)
+    api_key = settings.get(args.api_key_env)
     if not api_key:
         return _configuration_error(
             args,
             f"{args.api_key_env} is not set.",
             hint=(
-                f"Export the key in your shell or use --api-key-env NAME. "
+                f"Save {args.api_key_env} in ~/.config/yt-transcribe/.env or ./.env, "
+                "pass --env-file PATH, or set it in the process environment. "
                 "The key itself is never accepted as a CLI argument."
             ),
         )
@@ -242,7 +254,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except OSError as exc:
         return _configuration_error(args, f"Could not read prompt file: {exc}")
 
-    output_dir = args.output_dir.expanduser().resolve()
+    output_dir = (
+        args.output_dir
+        if args.output_dir is not None
+        else Path(settings.get("REMEM_TRANSCRIPTS_DIR", DEFAULT_OUTPUT_DIR))
+    ).expanduser().resolve()
     cache_dir = (
         args.cache_dir.expanduser().resolve()
         if args.cache_dir is not None
@@ -276,7 +292,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         _progress(options.progress, "cli.start", sources=len(args.source))
         transcriber = YTTranscriber.from_openai(
             api_key=api_key,
-            base_url=args.base_url,
+            base_url=(
+                args.base_url
+                if args.base_url is not None
+                else settings.get("OPENAI_BASE_URL")
+            ),
         )
         if len(args.source) > 1:
             result = transcriber.transcribe_many(args.source, options)

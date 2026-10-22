@@ -55,20 +55,59 @@ uv tool ensurepath
 ```
 
 Open a new terminal if `uv tool ensurepath` updates your shell configuration.
-The Python package bundles its internal libraries and has no third-party
-Python runtime dependencies; `yt-dlp` and FFmpeg are separate command-line tools.
+The Python package bundles its internal libraries and installs `python-dotenv`
+for environment-file support; `yt-dlp` and FFmpeg are separate command-line tools.
 
-Set your API key in the shell, then transcribe a video:
+### One-time API setup
+
+Save your API key in `~/.config/yt-transcribe/.env` to use the command from
+any directory, including when an agent launches it:
 
 ```bash
-export OPENAI_API_KEY="your-api-key"
+mkdir -p ~/.config/yt-transcribe
+nano ~/.config/yt-transcribe/.env
+```
+
+Put this in the file (see [.env.example](.env.example)):
+
+```dotenv
+OPENAI_API_KEY=your-api-key
+```
+
+Then restrict access to the file and run the command:
+
+```bash
+chmod 600 ~/.config/yt-transcribe/.env
 yt-transcribe "https://www.youtube.com/watch?v=VIDEO_ID" --verbose
 ```
 
+No shell export is needed on subsequent runs. If `XDG_CONFIG_HOME` is set,
+the user file is `$XDG_CONFIG_HOME/yt-transcribe/.env` instead.
+
+For a project, create a `.env` in the directory where you run the command.
+For an agent or script, you can select a file explicitly:
+
+```bash
+yt-transcribe VIDEO_ID --env-file /path/to/credentials.env --json
+```
+
+Settings load in this order: user file, current-directory `.env`, then existing
+process environment variables. Later values win. `--env-file` replaces both
+automatic files; process environment variables still take precedence.
+`--no-env-file` disables file loading. Only the current directory is checked
+for a project file; parent directories are not searched.
+
+Files support `KEY=value`, quoted values, comments, and optional `export`
+prefixes. Values are read literally without variable expansion or shell
+execution. `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `REMEM_TRANSCRIPTS_DIR`, and
+keys selected with `--api-key-env NAME` can all come from these files.
+Explicit CLI options such as `--base-url` and `--output-dir` override settings.
+Real `.env` files are ignored by this repository's `.gitignore`.
+
 The API receives the audio chunks and may charge for transcription.
 Downloads, processing, and saved artifacts live on your machine.
-The CLI reads credentials from environment variables, not command-line arguments,
-and does not load `.env` files automatically.
+Credentials are read from files or the environment, rather than passed as
+command-line arguments. Existing environment variables remain supported for CI.
 
 ## Everyday use
 
@@ -196,11 +235,15 @@ Run `yt-transcribe --help` for the full option reference.
 The same installation includes the underlying libraries:
 
 ```python
-import os
 from pathlib import Path
 from yt_transcribe import YTTranscribeOptions, YTTranscriber
+from yt_transcribe_cli.config import load_environment
 
-yt = YTTranscriber.from_openai(api_key=os.environ["OPENAI_API_KEY"])
+settings = load_environment()
+yt = YTTranscriber.from_openai(
+    api_key=settings["OPENAI_API_KEY"],
+    base_url=settings.get("OPENAI_BASE_URL"),
+)
 result = yt.transcribe(
     "https://youtu.be/VIDEO_ID",
     YTTranscribeOptions(output_dir=Path("transcripts")),
