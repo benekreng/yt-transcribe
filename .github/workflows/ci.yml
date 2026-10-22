@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: "0.11.25"
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install --yes ffmpeg
+
+      - name: Install locked development environment
+        run: uv sync --locked
+
+      - name: Run tests, including local ffmpeg integration
+        run: uv run --locked pytest
+
+      - name: Verify CLI entry point
+        run: uv run --locked yt-transcribe --help
+
+      - name: Build standalone distribution
+        run: uv build --no-sources
+
+      - name: Verify wheel installation in a clean environment
+        run: |
+          uv venv /tmp/yt-transcribe-smoke
+          uv pip install --python /tmp/yt-transcribe-smoke/bin/python dist/*.whl
+          cd /tmp
+          /tmp/yt-transcribe-smoke/bin/yt-transcribe --help

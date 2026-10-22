@@ -1,0 +1,43 @@
+[project]
+name = "yt-transcribe"
+version = "0.1.0"
+description = "YouTube transcripts for your terminal, clipboard, and scripts."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MPL-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Benedikt Krengel" }]
+keywords = ["youtube", "transcription", "cli", "audio", "subtitles"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/benekreng/yt-transcribe"
+Repository = "https://github.com/benekreng/yt-transcribe"
+Issues = "https://github.com/benekreng/yt-transcribe/issues"
+
+[project.scripts]
+yt-transcribe = "yt_transcribe_cli.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["yt_transcribe_cli*", "yt_transcribe*", "audio_transcribe*", "ai_providers*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

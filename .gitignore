@@ -1,0 +1,14 @@
+.DS_Store
+.env
+.env.*
+.venv/
+.cache/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+/build/
+/dist/
+/transcripts/
+/audio/
+/chunks/
